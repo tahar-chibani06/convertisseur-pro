@@ -1,4 +1,4 @@
-const CACHE_NAME = 'convertisseur-pro-v1';
+const CACHE_NAME = 'convertisseur-pro-v2'; // J'ai changé le nom pour forcer la mise à jour
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,38 +10,46 @@ const ASSETS_TO_CACHE = [
   'https://esm.sh/lucide-react@0.263.1'
 ];
 
-// Installation du Service Worker et mise en cache des ressources
+// 1. Installation : On force le téléchargement immédiat de TOUS les fichiers
 self.addEventListener('install', (event) => {
+  self.skipWaiting(); // Force le Service Worker à s'activer tout de suite
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
+      console.log('Mise en cache des fichiers en cours...');
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
 });
 
-// Activation et nettoyage des anciens caches
+// 2. Activation : On nettoie les vieux caches pour éviter les conflits
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keyList) => {
       return Promise.all(keyList.map((key) => {
         if (key !== CACHE_NAME) {
+          console.log('Suppression de l\'ancien cache:', key);
           return caches.delete(key);
         }
       }));
     })
   );
+  return self.clients.claim(); // Prend le contrôle de la page immédiatement
 });
 
-// Interception des requêtes réseau (Stratégie : Cache First, puis Network)
+// 3. Interception : Stratégie "Cache ou Réseau" (Offline first)
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // Si trouvé dans le cache, on le retourne
+      // Si le fichier est dans le cache (même sans internet), on le donne
       if (cachedResponse) {
         return cachedResponse;
       }
-      // Sinon on va le chercher sur le réseau
-      return fetch(event.request);
+      // Sinon, on essaie de le télécharger (cas où on est en ligne)
+      return fetch(event.request).catch(() => {
+        // Si ça échoue (pas d'internet et pas en cache), on ne peut rien faire pour ce fichier spécifique
+        // Mais pour l'app principale, le cache aura déjà répondu.
+        console.log("Fichier introuvable hors ligne : ", event.request.url);
+      });
     })
   );
 });
